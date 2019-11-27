@@ -1,2 +1,1 @@
-Andrew Tsung
-Henghui He
+Andrew Tsung and Henghui He
