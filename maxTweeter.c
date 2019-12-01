@@ -7,23 +7,37 @@
 
 int isQuoted = 0;
 
+// Input: char* line: the character string in the current row
+//      int num: index of the column number
+//      int numSections: used to check if the current row has the same number of sections as the header
+// Output: extracts name column from the current row
 char* getname(char* line, int num, int numSections)
 {
         int curIndex = -1;
         char* tok;
         char* retString;
-        //for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n"))
+
+        // account for edge case if row ends in ,
+        if(line[strlen(line) - 2] == ','){
+                retString = "";
+                numSections--;
+        }
+
+        // extract each section of the csv
         for (tok = strtok(line, ","); ; tok = strtok(NULL, ",\n"))
         {
                 if(tok != NULL){
                         curIndex++;
                 }
+
                 // if the number of sections doesn't match the number of header sections
                 else if (curIndex != numSections) {
                         return NULL;
                 } else{
                         return retString;
                 }
+
+                // if at the appropriate column, set the return string
                 if (curIndex == num){
                         retString = tok;
                 }
@@ -32,25 +46,35 @@ char* getname(char* line, int num, int numSections)
         return NULL;
 }
 
-int getnameindex(char* header)
+//Input: char* header: character array of the header row
+//      int numSections: used to determine which algorithm to use depending if there are 1 or more than 1 columns
+int getnameindex(char* header, int numSections)
 {
+
         int curIndex = -1;
 
         // tracks number of columns w/ "name" as column header
         int nameCount = 0;
         int nameIndex = -1;
 
+        // account for edge case if row ends in ,
+        if(header[strlen(header) - 2] == ','){
+                numSections++;
+        }
+
         const char* tok;
-        //for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n"))
+        // Algorithm for if more than 0 columns
         for (tok = strtok(header, ","); ; tok = strtok(NULL, ",\n"))
         {
                 if(tok != NULL){
                         curIndex++;
-                        // if multiple columns are called "name"
-                        if ((strcmp(tok, "\"name\"") == 0) || (strcmp(tok, "name") == 0)){
-                                if(strcmp(tok, "\"name\"") == 0){
+                        // if column header is any form of name
+                        if ((strcmp(tok, "\"name\"") == 0) || (strcmp(tok, "\"name\"\n") == 0) || (strcmp(tok, "name") == 0) || (strcmp(tok, "name\n") == 0)){
+                                if((strcmp(tok, "\"name\"") == 0) || (strcmp(tok, "\"name\"\n") == 0)){
                                         isQuoted = 1;
                                 }
+
+                                // if multiple "name" columns
                                 if(nameCount >= 1){
                                         printf("Invalid Input Format\n");
                                         exit(0);
@@ -63,14 +87,38 @@ int getnameindex(char* header)
                         break;
                 }
         }
+
+        // Algorithm for if there is 1 column in the csv
+        if(numSections == 0){
+
+                // check if the header is name
+                if ((strcmp(header, "\"name\"\n") == 0) || (strcmp(header, "name\n") == 0)){
+                        if(strcmp(header, "\"name\"\n") == 0){
+                                isQuoted = 1;
+                        }
+                }
+                else{
+                        printf("Invalid Input Format\n");
+                        exit(0);
+                }
+                return curIndex;
+        }
+
         return nameIndex;
 }
 
+// Output: returns index of last column (ie if there are 5 total rows, will return 4)
 int getnumSections(char* header)
 {
         int index = -1;
         const char* tok;
-        //for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n"))
+
+        // accounts for edge case if row ends in ,
+        if(header[strlen(header) - 2] == ','){
+                index++;
+        }
+
+        // increments index for each section in the row
         for (tok = strtok(header, ","); ; tok = strtok(NULL, ",\n"))
         {
                 if(tok != NULL){
@@ -95,10 +143,10 @@ int main(int argc, char** argv)
         // test header
         fgets(line, 1024, stream);
         char* tmp = strdup(line);
-        int nameIndex = getnameindex(tmp);
-        tmp = strdup(line);
         int numSections = getnumSections(tmp);
-        //free(tmp);
+        tmp = strdup(line);
+        int nameIndex = getnameindex(tmp, numSections);
+
         if(nameIndex == -1){
                 printf("Invalid Input Format\n");
                 exit(0);
@@ -114,26 +162,22 @@ int main(int argc, char** argv)
                 count[index] = -1;
         }
 
-        // while loop starts at first tweet, not header -> parse
+        // while loop parses starting at first tweet
         while (fgets(line, 1024, stream))
         {
                 char* tmp = strdup(line);
                 char* out = getname(tmp, nameIndex, numSections);
                 if(out == NULL){
-                        //free(tmp);
-                        //free(out);
                         printf("Invalid Input Format\n");
                         exit(0);
                 }
 
                 float length = strlen(out);
 
-                // if tweet is supposed to be within quotes
+                // if name is supposed to be within quotes
                 if(isQuoted){
                         // if the tweet doesn't start and end in quotes
                         if(length < 2.0f || !(out[0] == '\"' && out[(int)length -1] == '\"')){
-                                //free(tmp);
-                                //free(out);
                                 printf("Invalid Input Format\n");
                                 exit(0);
                         }
@@ -144,15 +188,18 @@ int main(int argc, char** argv)
 
                 // if tweet isn't supposed to be in quotes but starts or ends in them
                 else if(length > 0.0f && (out[0] == '\"' || out[(int)length - 1] == '\"')){
-                        //free(out);
-                        //free(tmp);
                         printf("Invalid Input Format\n");
                         exit(0);
                 }
 
-                // account for the current name
+                // remove trailing newline
+                if(out[strlen(out) - 1] == '\n'){
+                        out[strlen(out) - 1] = '\0';
+                }
+
+                // account for the current name using the name/count arrays
                 for(index = 0; index < FILE_LIMIT; index++){
-                        // if names match, increment the count
+                        // if names match, increment its count array
                         if(count[index] != -1){
                                 if(strcmp(names[index], out) == 0){
                                         count[index] = count[index] + 1;
@@ -188,8 +235,8 @@ int main(int argc, char** argv)
                 if(count[index] == -1){
                         break;
                 }
-                // otherwise potentially add to top_count
 
+                // otherwise potentially add to top_count
                 // if haven't added enough to top elements yet
                 if(num_added < NUM_TOP_ELEMENTS){
                         // add to next available in top_list
@@ -207,7 +254,7 @@ int main(int argc, char** argv)
                         }
                 }
 
-                // if added enough elements, need to check if min is replaced
+                // if we already added enough elements, need to check if min of the maximums is replaced
                 else if(count[index] > min_count){
                         // replace min
                         top_count[min_index] = count[index];
