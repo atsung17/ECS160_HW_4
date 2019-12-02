@@ -4,46 +4,62 @@
 
 #define FILE_LIMIT 19999
 #define NUM_TOP_ELEMENTS 10
+#define LINE_SIZE 1024
 
 int isQuoted = 0;
 
 // Input: char* line: the character string in the current row
 //      int num: index of the column number
-//      int numSections: used to check if the current row has the same number of sections as the header
+//      int nameIndex: used to check if the current row has the same number of sections as the header
 // Output: extracts name column from the current row
-char* getname(char* line, int num, int numSections)
+char* getname(char* line, int nameIndex, int numSections)
 {
-        int curIndex = -1;
+        int curIndex = 0;
         char* tok;
-        char* retString;
+        char* retString = (char*)malloc(sizeof(char) * LINE_SIZE);
 
-        // account for edge case if row ends in ,
-        if(line[strlen(line) - 2] == ','){
-                retString = "";
-                numSections--;
+        // check if same number of sections as header
+        int tempCount = 0;
+        char* temp = strdup(line);
+        while(temp[0] != '\0' && temp[0] != '\n'){
+                if(temp[0] == ','){
+                        tempCount++;
+                }
+                temp++;
+        }
+        if(tempCount != numSections){
+                printf("Invalid Input Format\n");
+                exit(0);
         }
 
-        // extract each section of the csv
-        for (tok = strtok(line, ","); ; tok = strtok(NULL, ",\n"))
-        {
-                if(tok != NULL){
+        // return the proper name
+        if(line == NULL){
+                return NULL;
+        }
+
+        // get to proper column
+        char* itr = strdup(line);
+        while(curIndex < nameIndex){
+                if(itr[0] == ','){
                         curIndex++;
                 }
-
-                // if the number of sections doesn't match the number of header sections
-                else if (curIndex != numSections) {
-                        return NULL;
-                } else{
-                        return retString;
-                }
-
-                // if at the appropriate column, set the return string
-                if (curIndex == num){
-                        retString = tok;
-                }
+                itr++;
         }
+
+        // at first element of name
+        if(itr[0] == '\0' || itr[0] == ',' || itr[0] == '\n'){
+                return "";
+        }
+        curIndex = 0;
+
+        while(itr[0] != '\0' && itr[0] != ',' && itr[0] != '\n'){
+                retString[curIndex] = itr[0];
+                curIndex++;
+                itr++;
+        }
+
         // if there was nothing in the line
-        return NULL;
+        return retString;
 }
 
 //Input: char* header: character array of the header row
@@ -51,19 +67,34 @@ char* getname(char* line, int num, int numSections)
 int getnameindex(char* header, int numSections)
 {
 
+        // Algorithm for if there is 1 column in the csv
+        if(numSections == 0){
+
+                // check if the header is name
+                if ((strcmp(header, "\"name\"\n") == 0) || (strcmp(header, "name\n") == 0)){
+                        if(strcmp(header, "\"name\"\n") == 0){
+                                isQuoted = 1;
+                        }
+                }
+                else{
+                        printf("Invalid Input Format\n");
+                        exit(0);
+                }
+                return 0;
+        }
+
+        // Otherwise there is more than 1 column
         int curIndex = -1;
 
         // tracks number of columns w/ "name" as column header
         int nameCount = 0;
-        int nameIndex = -1;
-
-        // account for edge case if row ends in ,
-        if(header[strlen(header) - 2] == ','){
-                numSections++;
-        }
+        int nameIndex = 0;
 
         const char* tok;
-        // Algorithm for if more than 0 columns
+        const char* nameType;
+        char* copy = strdup(header);
+
+        // make sure there is only one name column
         for (tok = strtok(header, ","); ; tok = strtok(NULL, ",\n"))
         {
                 if(tok != NULL){
@@ -79,7 +110,7 @@ int getnameindex(char* header, int numSections)
                                         printf("Invalid Input Format\n");
                                         exit(0);
                                 }
-                                nameIndex = curIndex;
+                                nameType = tok;
                                 nameCount++;
                         }
                 }
@@ -88,20 +119,18 @@ int getnameindex(char* header, int numSections)
                 }
         }
 
-        // Algorithm for if there is 1 column in the csv
-        if(numSections == 0){
+        if(nameType == NULL){
+                return -1;
+        }
 
-                // check if the header is name
-                if ((strcmp(header, "\"name\"\n") == 0) || (strcmp(header, "name\n") == 0)){
-                        if(strcmp(header, "\"name\"\n") == 0){
-                                isQuoted = 1;
-                        }
+        while(copy[0] != '\0' && copy[0] != '\n'){
+                if(copy[0] == ','){
+                        nameIndex++;
                 }
-                else{
-                        printf("Invalid Input Format\n");
-                        exit(0);
+                else if(strncmp(copy, nameType, strlen(nameType)) == 0){
+                        break;
                 }
-                return curIndex;
+                copy++;
         }
 
         return nameIndex;
@@ -110,23 +139,13 @@ int getnameindex(char* header, int numSections)
 // Output: returns index of last column (ie if there are 5 total rows, will return 4)
 int getnumSections(char* header)
 {
-        int index = -1;
-        const char* tok;
-
-        // accounts for edge case if row ends in ,
-        if(header[strlen(header) - 2] == ','){
-                index++;
-        }
-
-        // increments index for each section in the row
-        for (tok = strtok(header, ","); ; tok = strtok(NULL, ",\n"))
-        {
-                if(tok != NULL){
+        // gets number of sections based on number of commas
+        int index = 0;
+        while(header[0] != '\0' && header[0] != '\n'){
+                if(header[0] == ','){
                         index++;
                 }
-                else {
-                        break;
-                }
+                header++;
         }
         return index;
 }
@@ -137,15 +156,14 @@ int main(int argc, char** argv)
         FILE* stream = fopen(argv[1], "r");
 
         char line[1024];
-        float lines = 0;
-        float lenTotal = 0;
 
         // test header
         fgets(line, 1024, stream);
+
         char* tmp = strdup(line);
         int numSections = getnumSections(tmp);
-        tmp = strdup(line);
-        int nameIndex = getnameindex(tmp, numSections);
+        char* tmp2 = strdup(line);
+        int nameIndex = getnameindex(tmp2, numSections);
 
         if(nameIndex == -1){
                 printf("Invalid Input Format\n");
@@ -165,8 +183,8 @@ int main(int argc, char** argv)
         // while loop parses starting at first tweet
         while (fgets(line, 1024, stream))
         {
-                char* tmp = strdup(line);
-                char* out = getname(tmp, nameIndex, numSections);
+                char* row = strdup(line);
+                char* out = getname(row, nameIndex, numSections);
                 if(out == NULL){
                         printf("Invalid Input Format\n");
                         exit(0);
@@ -192,8 +210,8 @@ int main(int argc, char** argv)
                         exit(0);
                 }
 
-                // remove trailing newline
-                if(out[strlen(out) - 1] == '\n'){
+                // potentially remove trailing newline
+                if(strlen(out) > 0 && out[strlen(out) - 1] == '\n'){
                         out[strlen(out) - 1] = '\0';
                 }
 
